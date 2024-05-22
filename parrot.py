@@ -13,6 +13,14 @@ import time
 #from plyer import notification
 
 
+def create_node_id(node_number):
+    return f'!{hex(node_number)[2:]:0>8}'
+
+def decode_node_id(node_id):
+    hex_string = node_id[1:]  # Removing the '!' character
+    return int(hex_string, 16)
+
+
 # Default settings
 MQTT_BROKER = "mqtt.meshtastic.org"
 MQTT_PORT = 1883
@@ -33,31 +41,20 @@ broadcast_id = 4294967295
 
 # Convert hex to int and remove '!'
 #node_number = 2882396642 # int('abcd', 16)
-#node_number = int('abcd1234', 16)
+bot_nodenum = int('abcd1234', 16)
 #node_number = int('e2e38f58', 16) #Azzr
-node_number = int('7c5afde0', 16) #TD0 taco
+#node_number = int('7c5afde0', 16) #TD0 taco
+bot_nodeid = create_node_id(bot_nodenum)
+node_name = bot_nodeid
+
+print(f'AUTO-ROUTER NODE-ID: {bot_nodeid}')
 
 
-
-def create_node_id(node_number):
-    return f'!{hex(node_number)[2:]:0>8}'
-
-def decode_node_id(node_id):
-    hex_string = node_id[1:]  # Removing the '!' character
-    return int(hex_string, 16)
-
-node_id = create_node_id(node_number)
-node_name = node_id
-print(node_id)
-print(node_name)
-
-print(f'AUTO-ROUTER NODE-ID: {node_id}')
-
-def set_topic():
-    global subscribe_topic, publish_topic, node_number, node_name
-    node_name = create_node_id(node_number)
+def set_topic(source_nodenum):
+    global subscribe_topic, publish_topic
+    topic_name = create_node_id(source_nodenum)
     subscribe_topic = root_topic + channel + "/#"
-    publish_topic = root_topic + channel + "/" + node_name
+    publish_topic = root_topic + channel + "/" + topic_name
 
 
 
@@ -102,7 +99,7 @@ def publish_message(destination_id, message):
 def generate_mesh_packet(destination_id, encoded_message):
     mesh_packet = mesh_pb2.MeshPacket()
 
-    setattr(mesh_packet, "from", node_number)
+    setattr(mesh_packet, "from", bot_nodenum)
     # setattr(mesh_packet, "long_name", "AUTO-REPLY")
 
     mesh_packet.id = random.getrandbits(32)
@@ -122,7 +119,7 @@ def generate_mesh_packet(destination_id, encoded_message):
     service_envelope.gateway_id = node_name
 
     payload = service_envelope.SerializeToString()
-    set_topic()
+    set_topic(bot_nodenum)
     client.publish(publish_topic, payload)
 
 
@@ -130,7 +127,7 @@ def encrypt_message(channel, key, mesh_packet, encoded_message):
     mesh_packet.channel = generate_hash(channel, key)
     key_bytes = base64.b64decode(key.encode('ascii'))
     nonce_packet_id = mesh_packet.id.to_bytes(8, "little")
-    nonce_from_node = node_number.to_bytes(8, "little")
+    nonce_from_node = bot_nodenum.to_bytes(8, "little")
     nonce = nonce_packet_id + nonce_from_node
 
     cipher = Cipher(algorithms.AES(key_bytes), modes.CTR(nonce), backend=default_backend())
@@ -157,7 +154,7 @@ def process_message(mp, text_payload, is_encrypted):
             "to": getattr(mp, "to")
         }
 
-        if create_node_id(getattr(mp, "to")) == node_id:
+        if create_node_id(getattr(mp, "to")) == bot_nodeid:
             # if getattr(mp, "hop_limit") == 3:
 
             #notification.notify(
@@ -175,7 +172,7 @@ def process_message(mp, text_payload, is_encrypted):
             time.sleep(1)
             publish_message(mp_from, f'Taco bot says: {text_payload}')
         
-        if create_node_id(getattr(mp, "from")) != node_id:
+        if create_node_id(getattr(mp, "from")) != bot_nodeid:
             print(f'message from {getattr(mp, "from")}')
             time.sleep(1)
             publish_message(broadcast_id, f'Taco bot says: {text_payload}')
