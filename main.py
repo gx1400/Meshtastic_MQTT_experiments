@@ -8,7 +8,7 @@ from cryptography.hazmat.backends import default_backend
 import base64
 import random
 
-from plyer import notification
+#from plyer import notification
 
 
 # Default settings
@@ -16,8 +16,8 @@ MQTT_BROKER = "mqtt.meshtastic.org"
 MQTT_PORT = 1883
 MQTT_USERNAME = "meshdev"
 MQTT_PASSWORD = "large4cats"
-root_topic = "msh/ANZ/2/c/"
-channel = "LongFast"
+root_topic = "msh/US/SecKC/2/e/"
+channel = "LongFastMQ"
 key = "1PG7OiApB1nwvP+rz05pAQ=="
 
 padded_key = key.ljust(len(key) + ((4 - (len(key) % 4)) % 4), '=')
@@ -38,11 +38,11 @@ def process_message(mp, text_payload, is_encrypted):
         "to": getattr(mp, "to")
     }
 
-    notification.notify(
-    title = f"{getattr(mp, 'from')}",
-    message = f"{text_payload}",
-    timeout = 10
-    )
+    #notification.notify(
+    #title = f"{getattr(mp, 'from')}",
+    #message = f"{text_payload}",
+    #timeout = 10
+    #)
     print(text)
 
 def decode_encrypted(message_packet):
@@ -90,7 +90,7 @@ def decode_encrypted(message_packet):
     except Exception as e:
         print(f"Decryption failed: {str(e)}")
 
-def on_connect(client, userdata, flags, rc, properties):
+def on_connect(client, userdata, flags, rc, properties = None):
     if rc == 0:
         print(f"Connected to {MQTT_BROKER} on topic {channel}")
     else:
@@ -112,7 +112,7 @@ def on_message(client, userdata, msg):
 
 if __name__ == '__main__':
     # client = mqtt.Client(client_id="", clean_session=True, userdata=None)
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    client = mqtt.Client() #mqtt.CallbackAPIVersion.VERSION2)
 
     client.on_connect = on_connect
     client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
