@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+# based on https://github.com/Bamorph/Meshtastic_MQTT_Terminal/
+
 import paho.mqtt.client as mqtt
 from meshtastic import mesh_pb2, mqtt_pb2, portnums_pb2, telemetry_pb2
 
@@ -8,7 +10,7 @@ from cryptography.hazmat.backends import default_backend
 import base64
 import random
 import time
-from plyer import notification
+#from plyer import notification
 
 
 # Default settings
@@ -16,9 +18,12 @@ MQTT_BROKER = "mqtt.meshtastic.org"
 MQTT_PORT = 1883
 MQTT_USERNAME = "meshdev"
 MQTT_PASSWORD = "large4cats"
-root_topic = "msh/ANZ/2/c/"
-channel = "LongFast"
-key = "1PG7OiApB1nwvP+rz05pAQ=="
+#root_topic = "msh/ANZ/2/c/"
+#channel = "LongFast"
+#key = "1PG7OiApB1nwvP+rz05pAQ=="
+root_topic = "msh/US/SecKC/2/e/"
+channel = "SecKC-Test"
+key = "E9M0+GqAIFGJQs7An0Rud0TLxS/gte9MFF7QpLDIJQQ="
 
 padded_key = key.ljust(len(key) + ((4 - (len(key) % 4)) % 4), '=')
 replaced_key = padded_key.replace('-', '+').replace('_', '/')
@@ -27,11 +32,15 @@ key = replaced_key
 broadcast_id = 4294967295
 
 # Convert hex to int and remove '!'
-node_number = 2882396642 # int('abcd', 16)
+#node_number = 2882396642 # int('abcd', 16)
+#node_number = int('abcd1234', 16)
+#node_number = int('e2e38f58', 16) #Azzr
+node_number = int('7c5afde0', 16) #TD0 taco
+
 
 
 def create_node_id(node_number):
-    return f"!{hex(node_number)[2:]}"
+    return f'!{hex(node_number)[2:]:0>8}'
 
 def decode_node_id(node_id):
     hex_string = node_id[1:]  # Removing the '!' character
@@ -39,12 +48,14 @@ def decode_node_id(node_id):
 
 node_id = create_node_id(node_number)
 node_name = node_id
+print(node_id)
+print(node_name)
 
 print(f'AUTO-ROUTER NODE-ID: {node_id}')
 
 def set_topic():
     global subscribe_topic, publish_topic, node_number, node_name
-    node_name = '!' + hex(node_number)[2:]
+    node_name = create_node_id(node_number)
     subscribe_topic = root_topic + channel + "/#"
     publish_topic = root_topic + channel + "/" + node_name
 
@@ -149,11 +160,11 @@ def process_message(mp, text_payload, is_encrypted):
         if create_node_id(getattr(mp, "to")) == node_id:
             # if getattr(mp, "hop_limit") == 3:
 
-            notification.notify(
-            title = f"{getattr(mp, 'from')}",
-            message = f"{text_payload}",
-            timeout = 10
-            )
+            #notification.notify(
+            #title = f"{getattr(mp, 'from')}",
+            #message = f"{text_payload}",
+            #timeout = 10
+            #)
 
             print("REPLY DETAILS")
             print(f'TO: {mp_from}')
@@ -162,9 +173,14 @@ def process_message(mp, text_payload, is_encrypted):
             print(mp)
 
             time.sleep(1)
-            publish_message(mp_from, f'PARROT:{text_payload}')
-
-    # print(known_id_list)
+            publish_message(mp_from, f'Taco bot says: {text_payload}')
+        
+        if create_node_id(getattr(mp, "from")) != node_id:
+            print(f'message from {getattr(mp, "from")}')
+            time.sleep(1)
+            publish_message(broadcast_id, f'Taco bot says: {text_payload}')
+        else:
+            print(f'message from this script')
 
 
 def decode_encrypted(message_packet):
@@ -208,7 +224,7 @@ def decode_encrypted(message_packet):
         pass
         # print(f"Decryption failed: {str(e)}")
 
-def on_connect(client, userdata, flags, rc, properties):
+def on_connect(client, userdata, flags, rc, properties = None):
     if rc == 0:
         print(f"Connected to {MQTT_BROKER} on topic {channel}")
     else:
@@ -237,7 +253,7 @@ def on_message(client, userdata, msg):
 
 if __name__ == '__main__':
     # client = mqtt.Client(client_id="", clean_session=True, userdata=None)
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    client = mqtt.Client() #mqtt.CallbackAPIVersion.VERSION2)
 
     client.on_connect = on_connect
     client.username_pw_set(username=MQTT_USERNAME, password=MQTT_PASSWORD)
