@@ -29,9 +29,11 @@ MQTT_PASSWORD = "large4cats"
 #root_topic = "msh/ANZ/2/c/"
 #channel = "LongFast"
 #key = "1PG7OiApB1nwvP+rz05pAQ=="
-root_topic = "msh/US/SecKC/2/e/"
-channel = "SecKC-Test"
-key = "E9M0+GqAIFGJQs7An0Rud0TLxS/gte9MFF7QpLDIJQQ="
+#root_topic = "msh/US/SecKC/2/e/"
+root_topic = "msh/US/SecKC/2/"
+#channel = "SecKC-Test"
+channel = "map"
+key = "redacted"
 
 padded_key = key.ljust(len(key) + ((4 - (len(key) % 4)) % 4), '=')
 replaced_key = padded_key.replace('-', '+').replace('_', '/')
@@ -45,7 +47,6 @@ bot_nodenum = int('abcd1234', 16)
 #node_number = int('e2e38f58', 16) #Azzr
 #node_number = int('7c5afde0', 16) #TD0 taco
 bot_nodeid = create_node_id(bot_nodenum)
-node_name = bot_nodeid
 
 print(f'AUTO-ROUTER NODE-ID: {bot_nodeid}')
 
@@ -79,12 +80,7 @@ def generate_hash(name, key):
     return result
 
 
-def direct_message(destination_id):
-    destination_id = int(destination_id[1:], 16)
-    publish_message(destination_id)
-
-
-def publish_message(destination_id, message):
+def publish_message(source_id, destination_id, message):
     global key
     # print(int(destination_id[1:], 16))
     message_text = message
@@ -93,13 +89,13 @@ def publish_message(destination_id, message):
         encoded_message.portnum = portnums_pb2.TEXT_MESSAGE_APP 
         encoded_message.payload = message_text.encode("utf-8")
 
-    generate_mesh_packet(destination_id, encoded_message)
+    generate_mesh_packet(source_id, destination_id, encoded_message)
 
 
-def generate_mesh_packet(destination_id, encoded_message):
+def generate_mesh_packet(source_id, destination_id, encoded_message):
     mesh_packet = mesh_pb2.MeshPacket()
 
-    setattr(mesh_packet, "from", bot_nodenum)
+    setattr(mesh_packet, "from", source_id)
     # setattr(mesh_packet, "long_name", "AUTO-REPLY")
 
     mesh_packet.id = random.getrandbits(32)
@@ -111,23 +107,23 @@ def generate_mesh_packet(destination_id, encoded_message):
     if key == "":
         mesh_packet.decoded.CopyFrom(encoded_message)
     else:
-        mesh_packet.encrypted = encrypt_message(channel, key, mesh_packet, encoded_message)
+        mesh_packet.encrypted = encrypt_message(channel, key, mesh_packet, encoded_message, source_id)
 
     service_envelope = mqtt_pb2.ServiceEnvelope()
     service_envelope.packet.CopyFrom(mesh_packet)
     service_envelope.channel_id = channel
-    service_envelope.gateway_id = node_name
+    service_envelope.gateway_id = create_node_id(source_id)
 
     payload = service_envelope.SerializeToString()
-    set_topic(bot_nodenum)
+    set_topic(source_id)
     client.publish(publish_topic, payload)
 
 
-def encrypt_message(channel, key, mesh_packet, encoded_message):
+def encrypt_message(channel, key, mesh_packet, encoded_message, source_id):
     mesh_packet.channel = generate_hash(channel, key)
     key_bytes = base64.b64decode(key.encode('ascii'))
     nonce_packet_id = mesh_packet.id.to_bytes(8, "little")
-    nonce_from_node = bot_nodenum.to_bytes(8, "little")
+    nonce_from_node = source_id.to_bytes(8, "little")
     nonce = nonce_packet_id + nonce_from_node
 
     cipher = Cipher(algorithms.AES(key_bytes), modes.CTR(nonce), backend=default_backend())
@@ -154,30 +150,17 @@ def process_message(mp, text_payload, is_encrypted):
             "to": getattr(mp, "to")
         }
 
-        if create_node_id(getattr(mp, "to")) == bot_nodeid:
-            # if getattr(mp, "hop_limit") == 3:
-
-            #notification.notify(
-            #title = f"{getattr(mp, 'from')}",
-            #message = f"{text_payload}",
-            #timeout = 10
-            #)
-
-            print("REPLY DETAILS")
-            print(f'TO: {mp_from}')
-            print(f'FROM: {mp_to}')
-            print(f'MESSAGE TEXT: {text_payload}')
-            print(mp)
-
-            time.sleep(1)
-            publish_message(mp_from, f'Taco bot says: {text_payload}')
+        source_id = mp_from
+        source_nodeid = create_node_id(getattr(mp, "from"))
         
         if create_node_id(getattr(mp, "from")) != bot_nodeid:
-            print(f'message from {getattr(mp, "from")}')
+            print(f'message from {getattr(mp, "from")} / {source_nodeid}')
             time.sleep(1)
-            publish_message(broadcast_id, f'Taco bot says: {text_payload}')
+            publish_message(source_id, broadcast_id, f'Taco bot says: {text_payload}')
         else:
             print(f'message from this script')
+    else:
+        print(f'packet {mp_id} already seen: {text_payload}')
 
 
 def decode_encrypted(message_packet):
@@ -214,6 +197,10 @@ def decode_encrypted(message_packet):
                 # message = f"{info}",
                 # timeout = 10
                 # )
+        elif message_packet.decoded.portnum == portnums_pb2.MAP_REPORT_APP:
+            print('map packet')
+        else:
+            print('unknown')
 
 
 
@@ -246,6 +233,8 @@ def on_message(client, userdata, msg):
         return
     
     if message_packet.HasField("encrypted") and not message_packet.HasField("decoded"):
+        decode_encrypted(message_packet)
+    else:
         decode_encrypted(message_packet)
 
 if __name__ == '__main__':
